@@ -47,7 +47,8 @@ class Command(PootleCommand):
                                        unit.target, target_language,
                                        unit.developer_comment)
 
-            filename = os.path.join(settings.OFFLINE_TM_DIR, store.name + '.tmx')
+            filename = '__'.join(store.pootle_path.split('/') + [store.name])
+            filename = os.path.join(settings.OFFLINE_TM_DIR, filename + '.tmx')
             with open(filename, 'wb') as output:
                 tmxfile.serialize(output)
 
