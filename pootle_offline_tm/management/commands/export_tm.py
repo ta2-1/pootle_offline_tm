@@ -24,6 +24,14 @@ cache = caches['offline_tm']
 class Command(PootleCommand):
     help = "Export TM from Pootle to .tmx files."
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--single-file",
+            action="store_true",
+            default=False,
+            help=u"Export a whole translation project into one file",
+        )
+
     def _export_by_stores(self, translation_project, tp_max_unit_revision):
         source_language = translation_project.project.source_language.code
         target_language = translation_project.language.code
@@ -54,6 +62,22 @@ class Command(PootleCommand):
 
         return tp_max_unit_revision
 
+    def _export_as_single_file(self, translation_project):
+        source_language = translation_project.project.source_language.code
+        target_language = translation_project.language.code
+        stores = translation_project.stores.live()
+
+        tmxfile = tmx.tmxfile()
+        for store in stores.filter(state=TRANSLATED).iterator():
+            for unit in store.units:
+                tmxfile.addtranslation(unit.source, source_language,
+                                       unit.target, target_language,
+                                       unit.developer_comment)
+        filename = '__'.join(translation_project.pootle_path.split('/'))
+        filename = os.path.join(settings.OFFLINE_TM_DIR, filename + '.tmx')
+        with open(filename, 'wb') as output:
+            tmxfile.serialize(output)
+
     def handle_translation_project(self, translation_project, **options):
         """
         :return: flag if child stores should be handled
@@ -67,9 +91,12 @@ class Command(PootleCommand):
                 translation_project)
             return False
 
-        tp_max_unit_revision = self._export_by_stores(
-            translation_project,
-            tp_max_unit_revision)
+        if options.get('single-file', False):
+            self._export_as_single_file(translation_project)
+        else:
+            tp_max_unit_revision = self._export_by_stores(
+                translation_project,
+                tp_max_unit_revision)
 
         cache.set(tp_revision_cache_key, tp_max_unit_revision)
 
