@@ -78,6 +78,7 @@ class Command(PootleCommand):
         filename = os.path.join(settings.OFFLINE_TM_DIR, filename + '.tmx')
         with open(filename, 'wb') as output:
             tmxfile.serialize(output)
+            self.stdout.write('File "%s" has been saved.' % filename)
 
     def handle_translation_project(self, translation_project, **options):
         """
@@ -88,7 +89,7 @@ class Command(PootleCommand):
         tp_max_unit_revision = translation_project.data_tool.max_unit_revision
         if tp_cached_revision == tp_max_unit_revision:
             self.stdout.write(
-                'Translation project (%s) has been changed.' %
+                'Translation project (%s) has not been changed.' %
                 translation_project)
             return False
 
