@@ -25,6 +25,7 @@ class Command(PootleCommand):
     help = "Export TM from Pootle to .tmx files."
 
     def add_arguments(self, parser):
+        super(Command, self).add_arguments(parser)
         parser.add_argument(
             "--single-file",
             action="store_true",
