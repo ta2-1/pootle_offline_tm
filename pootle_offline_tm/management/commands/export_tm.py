@@ -9,16 +9,9 @@
 import os
 os.environ['DJANGO_SETTINGS_MODULE'] = 'pootle.settings'
 
-from django.conf import settings
-from django.core.cache import caches
-
-from translate.storage import tmx
-
 from pootle_app.management.commands import PootleCommand
-from pootle_store.constants import TRANSLATED
 
-
-cache = caches['offline_tm']
+from ...utils import TPExporter
 
 
 class Command(PootleCommand):
@@ -38,37 +31,14 @@ class Command(PootleCommand):
         :return: flag if child stores should be handled
         """
         overwrite = options.get('overwrite', False)
-        tp_revision_cache_key = 'revision:%s' % translation_project.pootle_path
-        tp_cached_revision = cache.get(tp_revision_cache_key, 0)
-        tp_max_unit_revision = translation_project.data_tool.max_unit_revision
-        if tp_cached_revision == tp_max_unit_revision and not overwrite:
+        exporter = TPExporter(translation_project)
+        if not exporter.has_changes() and not overwrite:
             self.stdout.write(
                 'Translation project (%s) has not been changed.' %
                 translation_project)
             return False
 
-        source_language = translation_project.project.source_language.code
-        target_language = translation_project.language.code
-        stores = translation_project.stores.live()
-
-        tmxfile = tmx.tmxfile()
-        for store in stores.filter().iterator():
-            for unit in store.units.filter(state=TRANSLATED):
-                tmxfile.addtranslation(unit.source, source_language,
-                                       unit.target, target_language,
-                                       unit.developer_comment)
-
-        directory = os.path.join(settings.OFFLINE_TM_DIR,
-                                 translation_project.language.code)
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-        filename = "".join([translation_project.project.fullname,
-                            '.', translation_project.language.code, '.tmx'])
-        filename = os.path.join(directory, filename)
-        with open(filename, 'wb') as output:
-            tmxfile.serialize(output)
-            self.stdout.write('File "%s" has been saved.' % filename)
-
-        cache.set(tp_revision_cache_key, tp_max_unit_revision)
+        filename = exporter.export()
+        self.stdout.write('File "%s" has been saved.' % filename)
 
         return False
