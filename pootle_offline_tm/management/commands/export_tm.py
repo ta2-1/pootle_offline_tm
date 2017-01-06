@@ -27,78 +27,47 @@ class Command(PootleCommand):
     def add_arguments(self, parser):
         super(Command, self).add_arguments(parser)
         parser.add_argument(
-            "--single-file",
+            "--overwrite",
             action="store_true",
             default=False,
-            help=u"Export a whole translation project into one file",
+            help=u"Overwrite already exported files.",
         )
-
-    def _export_by_stores(self, translation_project, tp_max_unit_revision):
-        source_language = translation_project.project.source_language.code
-        target_language = translation_project.language.code
-        stores = translation_project.stores.live()
-
-        for store in stores.filter(state=TRANSLATED).iterator():
-            revision_cache_key = 'revision:%s' % store.pootle_path
-            cached_revision = cache.get(revision_cache_key)
-            store_max_unit_revision = store.data_tool.max_unit_revision
-
-            if cached_revision == store_max_unit_revision:
-                continue
-
-            # store might be updated after we stored tp_max_unit_revision
-            tp_max_unit_revision = max(tp_max_unit_revision,
-                                       store_max_unit_revision)
-
-            tmxfile = tmx.tmxfile()
-            for unit in store.units:
-                tmxfile.addtranslation(unit.source, source_language,
-                                       unit.target, target_language,
-                                       unit.developer_comment)
-
-            filename = '__'.join(store.pootle_path.split('/') + [store.name])
-            filename = os.path.join(settings.OFFLINE_TM_DIR, filename + '.tmx')
-            with open(filename, 'wb') as output:
-                tmxfile.serialize(output)
-
-        return tp_max_unit_revision
-
-    def _export_as_single_file(self, translation_project):
-        source_language = translation_project.project.source_language.code
-        target_language = translation_project.language.code
-        stores = translation_project.stores.live()
-
-        tmxfile = tmx.tmxfile()
-        for store in stores.filter(state=TRANSLATED).iterator():
-            for unit in store.units:
-                tmxfile.addtranslation(unit.source, source_language,
-                                       unit.target, target_language,
-                                       unit.developer_comment)
-        filename = '__'.join(translation_project.pootle_path.split('/'))
-        filename = os.path.join(settings.OFFLINE_TM_DIR, filename + '.tmx')
-        with open(filename, 'wb') as output:
-            tmxfile.serialize(output)
-            self.stdout.write('File "%s" has been saved.' % filename)
 
     def handle_translation_project(self, translation_project, **options):
         """
         :return: flag if child stores should be handled
         """
+        overwrite = options.get('overwrite', False)
         tp_revision_cache_key = 'revision:%s' % translation_project.pootle_path
         tp_cached_revision = cache.get(tp_revision_cache_key, 0)
         tp_max_unit_revision = translation_project.data_tool.max_unit_revision
-        if tp_cached_revision == tp_max_unit_revision:
+        if tp_cached_revision == tp_max_unit_revision and not overwrite:
             self.stdout.write(
                 'Translation project (%s) has not been changed.' %
                 translation_project)
             return False
 
-        if options.get('single-file', False):
-            self._export_as_single_file(translation_project)
-        else:
-            tp_max_unit_revision = self._export_by_stores(
-                translation_project,
-                tp_max_unit_revision)
+        source_language = translation_project.project.source_language.code
+        target_language = translation_project.language.code
+        stores = translation_project.stores.live()
+
+        tmxfile = tmx.tmxfile()
+        for store in stores.filter().iterator():
+            for unit in store.units.filter(state=TRANSLATED):
+                tmxfile.addtranslation(unit.source, source_language,
+                                       unit.target, target_language,
+                                       unit.developer_comment)
+
+        directory = os.path.join(settings.OFFLINE_TM_DIR,
+                                 translation_project.language.code)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        filename = "".join([translation_project.project.fullname,
+                            '.', translation_project.language.code, '.tmx'])
+        filename = os.path.join(directory, filename)
+        with open(filename, 'wb') as output:
+            tmxfile.serialize(output)
+            self.stdout.write('File "%s" has been saved.' % filename)
 
         cache.set(tp_revision_cache_key, tp_max_unit_revision)
 
